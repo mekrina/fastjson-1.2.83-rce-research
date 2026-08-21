@@ -1,9 +1,12 @@
-package PoC_1283;
+package utils;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -22,11 +25,26 @@ public final class PocIO {
 
     /** 把单个 class 字节码打包成 jar 文件（自动创建父目录） */
     public static void writeJar(String path, String entryName, byte[] classBytes) throws IOException {
+        Map<String, byte[]> entries = new LinkedHashMap<>();
+        entries.put(entryName, classBytes);
+        writeJar(path, entries);
+    }
+
+    /** 把多个 entry（entryName -> class 字节码）打包成 jar 文件（自动创建父目录） */
+    public static void writeJar(String path, Map<String, byte[]> entries) throws IOException {
         ensureParent(path);
         try (JarOutputStream jos = new JarOutputStream(Files.newOutputStream(Paths.get(path)))) {
-            jos.putNextEntry(new JarEntry(entryName));
-            jos.write(classBytes);
-            jos.closeEntry();
+            for (Map.Entry<String, byte[]> e : entries.entrySet()) {
+                jos.putNextEntry(new JarEntry(e.getKey()));
+                jos.write(e.getValue());
+                jos.closeEntry();
+            }
         }
+    }
+
+    /** 写文本文件（UTF-8，自动创建父目录） */
+    public static void writeText(String path, String text) throws IOException {
+        ensureParent(path);
+        Files.write(Paths.get(path), text.getBytes(StandardCharsets.UTF_8));
     }
 }

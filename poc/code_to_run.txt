@@ -1,0 +1,1 @@
+Runtime.getRuntime().exec(new String[]{"/bin/sh","-c","touch /tmp/fj2_pwned"});
